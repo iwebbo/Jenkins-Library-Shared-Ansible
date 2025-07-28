@@ -19,7 +19,7 @@ def call(Map config = [:]) {
     
     // Configuration par défaut
     def defaultConfig = [
-        ansible_path: '',
+        ansible_path: '/tmp/ansibleJenkins/ansible', //Change value to "" with checkout from GIT before
         config_path: '.',
         inventory: 'inventory',
         targetServers: '',
