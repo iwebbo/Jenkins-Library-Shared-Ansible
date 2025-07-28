@@ -1,0 +1,259 @@
+{
+  "library": {
+    "name": "jenkins-ansible-shared-library",
+    "version": "1.0.0",
+    "description": "Bibliothèque partagée Jenkins pour les déploiements Ansible"
+  },
+  "ansible": {
+    "defaults": {
+      "inventory": "inventories/production",
+      "playbook_path": "playbooks",
+      "vault_password_file": "/var/lib/jenkins/.ansible_vault_pass",
+      "host_key_checking": false,
+      "timeout": 3600,
+      "forks": 10,
+      "retry_files_enabled": false,
+      "gather_facts": true,
+      "verbosity": 1
+    },
+    "environments": {
+      "development": {
+        "inventory": "inventories/dev",
+        "extra_vars": {
+          "environment": "dev",
+          "debug_mode": true
+        },
+        "tags": ["dev", "development"],
+        "limit": "dev_servers"
+      },
+      "staging": {
+        "inventory": "inventories/staging",
+        "extra_vars": {
+          "environment": "staging",
+          "debug_mode": false
+        },
+        "tags": ["staging", "test"],
+        "limit": "staging_servers"
+      },
+      "production": {
+        "inventory": "inventories/production",
+        "extra_vars": {
+          "environment": "prod",
+          "debug_mode": false
+        },
+        "tags": ["prod", "production"],
+        "limit": "prod_servers",
+        "check_mode": false
+      }
+    },
+    "validation": {
+      "syntax_check": true,
+      "playbook_check": true,
+      "inventory_check": true,
+      "vault_check": true,
+      "required_files": [
+        "playbook.yml",
+        "inventories"
+      ],
+      "forbidden_modules": [
+        "shell",
+        "raw"
+      ],
+      "max_playbook_size": "10MB"
+    }
+  },
+  "jenkins": {
+    "build": {
+      "keep_builds": 30,
+      "timeout_minutes": 60,
+      "concurrent_builds": false,
+      "retry_count": 2
+    },
+    "workspace": {
+      "cleanup_after_build": true,
+      "archive_artifacts": [
+        "logs/*.log",
+        "reports/*.html",
+        "ansible.cfg"
+      ]
+    },
+    "permissions": {
+      "required_roles": [
+        "deploy",
+        "ansible-user"
+      ],
+      "admin_users": [
+        "jenkins-admin",
+        "devops-team"
+      ]
+    }
+  },
+  "notifications": {
+    "email": {
+      "enabled": true,
+      "smtp_server": "smtp.company.com",
+      "smtp_port": 587,
+      "from_address": "jenkins@company.com",
+      "template": "notification.html",
+      "send_on": [
+        "failure",
+        "success",
+        "unstable"
+      ],
+      "recipients": {
+        "development": [
+          "dev-team@company.com"
+        ],
+        "staging": [
+          "qa-team@company.com",
+          "dev-team@company.com"
+        ],
+        "production": [
+          "ops-team@company.com",
+          "dev-leads@company.com"
+        ]
+      }
+    },
+    "slack": {
+      "enabled": false,
+      "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+      "channel": "#deployments",
+      "username": "Jenkins Bot",
+      "icon_emoji": ":jenkins:",
+      "send_on": [
+        "failure",
+        "success"
+      ],
+      "mention_on_failure": [
+        "@devops-team"
+      ]
+    },
+    "teams": {
+      "enabled": false,
+      "webhook_url": "https://company.webhook.office.com/webhookb2/YOUR-WEBHOOK-URL",
+      "send_on": [
+        "failure",
+        "success"
+      ]
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "[%(asctime)s] %(levelname)s: %(message)s",
+    "file_rotation": {
+      "max_size": "100MB",
+      "backup_count": 5
+    },
+    "categories": {
+      "ansible": {
+        "level": "DEBUG",
+        "file": "logs/ansible.log"
+      },
+      "deployment": {
+        "level": "INFO",
+        "file": "logs/deployment.log"
+      },
+      "validation": {
+        "level": "WARN",
+        "file": "logs/validation.log"
+      }
+    }
+  },
+  "security": {
+    "ansible_vault": {
+      "required": true,
+      "password_file": "/var/lib/jenkins/.ansible_vault_pass",
+      "encrypted_files": [
+        "group_vars/all/vault.yml",
+        "host_vars/*/vault.yml"
+      ]
+    },
+    "ssh": {
+      "key_file": "/var/lib/jenkins/.ssh/ansible_rsa",
+      "strict_host_key_checking": false,
+      "connection_timeout": 30
+    },
+    "credentials": {
+      "vault_password_id": "ansible-vault-password",
+      "ssh_key_id": "ansible-ssh-key",
+      "git_credentials_id": "git-deploy-key"
+    }
+  },
+  "performance": {
+    "parallelism": {
+      "max_forks": 20,
+      "strategy": "linear",
+      "serial": 1
+    },
+    "caching": {
+      "fact_caching": "memory",
+      "fact_caching_timeout": 3600,
+      "host_key_checking": false
+    },
+    "optimization": {
+      "pipelining": true,
+      "mitogen_enabled": false,
+      "callback_whitelist": [
+        "timer",
+        "profile_tasks"
+      ]
+    }
+  },
+  "monitoring": {
+    "metrics": {
+      "enabled": true,
+      "export_format": "prometheus",
+      "endpoint": "/metrics"
+    },
+    "health_checks": {
+      "pre_deployment": [
+        "ansible_version_check",
+        "inventory_connectivity",
+        "vault_accessibility"
+      ],
+      "post_deployment": [
+        "service_status",
+        "endpoint_availability",
+        "log_analysis"
+      ]
+    },
+    "alerts": {
+      "deployment_duration_threshold": 1800,
+      "failure_rate_threshold": 0.1,
+      "disk_space_threshold": "85%"
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "retention_days": 30,
+    "backup_items": [
+      "inventories/",
+      "group_vars/",
+      "host_vars/",
+      "playbooks/",
+      "roles/"
+    ],
+    "storage": {
+      "type": "local",
+      "path": "/var/backups/ansible-deployments"
+    }
+  },
+  "integration": {
+    "git": {
+      "auto_clone": true,
+      "branch": "main",
+      "depth": 1,
+      "submodules": true
+    },
+    "artifactory": {
+      "enabled": false,
+      "url": "https://artifactory.company.com",
+      "repository": "ansible-artifacts"
+    },
+    "sonarqube": {
+      "enabled": false,
+      "server_url": "https://sonar.company.com",
+      "quality_gate": true
+    }
+  }
+}
