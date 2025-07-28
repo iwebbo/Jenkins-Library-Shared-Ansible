@@ -19,7 +19,9 @@ def call(Map config = [:]) {
     
     // Configuration par défaut
     def defaultConfig = [
-        inventory: 'inventories/hosts',
+        ansible_path: '',
+        config_path: '.',
+        inventory: 'inventory',
         targetServers: '',
         playbook: '',
         ansibleVars: [:],
