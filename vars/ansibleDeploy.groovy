@@ -1,153 +1,339 @@
+#!/usr/bin/env groovy
+
+/**
+ * Fonction principale de déploiement Ansible simplifiée
+ * Usage: ansibleDeploy([
+ *   playbook: 'site.yml', 
+ *   targetServers: 'web01,web02',
+ *   ansibleVars: [app_version: '1.2.3', debug_mode: 'true']
+ * ])
+ */
 def call(Map config = [:]) {
-    pipeline {
-        agent any
-        
-        environment {
-            ANSIBLE_HOST_KEY_CHECKING = 'False'
-            ANSIBLE_FORKS = '2'
-            ANSIBLE_CONFIG = '/tmp/ansibleJenkins/ansible/ansible.cfg'
+    // Validation des paramètres obligatoires
+    if (!config.playbook) {
+        error("Le paramètre 'playbook' est obligatoire")
+    }
+    if (!config.targetServers) {
+        error("Le paramètre 'targetServers' est obligatoire")
+    }
+    
+    // Configuration par défaut
+    def defaultConfig = [
+        inventory: 'inventories/hosts',
+        targetServers: '',
+        playbook: '',
+        ansibleVars: [:],
+        tags: '',
+        checkMode: false,
+        verbose: false,
+        timeout: 3600,
+        notification: true,
+        forks: 10,
+        become: true,
+        becomeUser: 'root'
+    ]
+    
+    // Fusion des configurations
+    config = defaultConfig + config
+    
+    echo "🚀 Début du déploiement Ansible"
+    echo "📋 Playbook: ${config.playbook}"
+    echo "🎯 Target Servers: ${config.targetServers}"
+    if (config.ansibleVars) {
+        echo "🔧 Variables Ansible: ${config.ansibleVars}"
+    }
+    
+    try {
+        // Étape 1: Détection du type de serveurs et credentials
+        stage('Détection Credentials') {
+            config.credentialInfo = detectServerCredentials(config.targetServers, config.inventory)
+            echo "🔑 Credentials détectés: ${config.credentialInfo}"
         }
         
-        parameters {
-            string(
-                name: 'ANSIBLE_ROLE',
-                defaultValue: config.defaultRole ?: 'homeassistant',
-                description: '''🎯 Rôle Ansible à déployer:
-                Variables par défaut dans roles/{role}/vars/main.yml'''
-            )
-            string(
-                name: 'TARGET',
-                defaultValue: config.defaultTarget ?: 'homeassistant',
-                description: '''🎯 Serveur ou groupe cible (inventory/hosts.ini)'''
-            )
-            string(
-                name: 'PLAYBOOK',
-                defaultValue: config.defaultPlaybook ?: 'site.yml',
-                description: '''📋 Playbook à exécuter (playbooks/)'''
-            )
-            text(
-                name: 'EXTRA_VARS',
-                defaultValue: config.defaultExtraVars ?: '',
-                description: '''🔧 Variables à override (--extra-vars)'''
-            )
-            choice(
-                name: 'ANSIBLE_OPTIONS',
-                choices: config.ansibleOptions ?: ['', '--check --diff', '--verbose', '--check --diff --verbose'],
-                description: 'Options Ansible supplémentaires'
-            )
+        // Étape 2: Validation
+        stage('Validation Ansible') {
+            ansibleValidate(config)
         }
         
-        stages {
-            stage('Configuration') {
-                steps {
-                    script {
-                        echo "=== ANSIBLE SHARED LIBRARY ==="
-                        echo "Rôle: ${params.ANSIBLE_ROLE}"
-                        echo "Target: ${params.TARGET}"
-                        echo "Playbook: ${params.PLAYBOOK}"
-                        echo "Extra vars: ${params.EXTRA_VARS}"
-                        echo "Options: ${params.ANSIBLE_OPTIONS}"
-                        
-                        env.ANSIBLE_ROLE = params.ANSIBLE_ROLE
-                        env.TARGET = params.TARGET
-                        env.PLAYBOOK = params.PLAYBOOK
-                        env.EXTRA_VARS = params.EXTRA_VARS ?: ''
-                        env.ANSIBLE_OPTIONS = params.ANSIBLE_OPTIONS ?: ''
-                        env.ANSIBLE_DIR = config.ansibleDir ?: '/tmp/ansibleJenkins/ansible'
-                    }
-                }
+        // Étape 3: Préparation des variables
+        stage('Préparation Variables') {
+            prepareAnsibleVars(config)
+        }
+        
+        // Étape 4: Exécution du playbook avec credentials
+        stage('Exécution Playbook') {
+            executeAnsiblePlaybookWithCredentials(config)
+        }
+        
+        // Étape 5: Notification de succès
+        if (config.notification) {
+            stage('Notification') {
+                ansibleNotify([
+                    status: 'success',
+                    playbook: config.playbook,
+                    targetServers: config.targetServers,
+                    ansibleVars: config.ansibleVars,
+                    duration: currentBuild.durationString
+                ])
+            }
+        }
+        
+    } catch (Exception e) {
+        // Notification d'échec
+        if (config.notification) {
+            ansibleNotify([
+                status: 'failure',
+                playbook: config.playbook,
+                targetServers: config.targetServers,
+                error: e.message,
+                duration: currentBuild.durationString
+            ])
+        }
+        throw e
+    }
+}
+
+/**
+ * Détecte le type de serveurs et retourne les credentials appropriés
+ */
+private def detectServerCredentials(String targetServers, String inventory) {
+    def credentialInfo = [
+        hasWindows: false,
+        hasLinux: false,
+        windowsCredentialId: 'windows-ansible-creds',
+        linuxCredentialId: 'linux-ansible-creds',
+        mixedEnvironment: false
+    ]
+    
+    script {
+        try {
+            // Récupération des informations sur les serveurs cibles
+            def serverInfo = sh(
+                script: """
+                    ansible ${targetServers} -i ${inventory} -m setup -a "filter=ansible_os_family" --one-line 2>/dev/null || \
+                    ansible ${targetServers} -i ${inventory} --list-hosts 2>/dev/null
+                """,
+                returnStdout: true
+            ).trim()
+            
+            echo "ℹ️  Informations serveurs: ${serverInfo}"
+            
+            // Détection Windows (recherche de patterns Windows)
+            if (serverInfo.toLowerCase().contains('windows') || 
+                serverInfo.toLowerCase().contains('win') ||
+                targetServers.toLowerCase().contains('win') ||
+                targetServers.toLowerCase().contains('windows')) {
+                credentialInfo.hasWindows = true
+                echo "🪟 Serveurs Windows détectés"
             }
             
-            stage('Validation') {
-                steps {
-                    script {
-                        ansibleValidate([
-                            ansibleDir: env.ANSIBLE_DIR,
-                            role: env.ANSIBLE_ROLE,
-                            target: env.TARGET,
-                            playbook: env.PLAYBOOK
-                        ])
-                    }
-                }
+            // Détection Linux (par défaut ou patterns Linux)
+            if (serverInfo.toLowerCase().contains('redhat') || 
+                serverInfo.toLowerCase().contains('ubuntu') ||
+                serverInfo.toLowerCase().contains('debian') ||
+                serverInfo.toLowerCase().contains('centos') ||
+                targetServers.toLowerCase().contains('linux') ||
+                targetServers.toLowerCase().contains('web') ||
+                targetServers.toLowerCase().contains('db') ||
+                !credentialInfo.hasWindows) {  // Par défaut = Linux
+                credentialInfo.hasLinux = true
+                echo "🐧 Serveurs Linux détectés"
             }
             
-            stage('Execute Ansible') {
-                steps {
-                    script {
-                        executeAnsiblePlaybook(config)
-                    }
-                }
+            // Environnement mixte
+            if (credentialInfo.hasWindows && credentialInfo.hasLinux) {
+                credentialInfo.mixedEnvironment = true
+                echo "🔄 Environnement mixte détecté (Windows + Linux)"
             }
+            
+        } catch (Exception e) {
+            echo "⚠️  Impossible de détecter le type de serveurs, utilisation Linux par défaut: ${e.message}"
+            credentialInfo.hasLinux = true
         }
-        
-        post {
-            always {
-                script {
-                    ansibleNotify([
-                        role: env.ANSIBLE_ROLE,
-                        target: env.TARGET,
-                        playbook: env.PLAYBOOK,
-                        result: currentBuild.currentResult,
-                        buildNumber: env.BUILD_NUMBER,
-                        buildUrl: env.BUILD_URL,
-                        emailTo: config.emailTo ?: 'admin@company.com'
-                    ])
-                }
-            }
-            success {
-                echo "✅ Déploiement ${env.ANSIBLE_ROLE} réussi"
-            }
-            failure {
-                echo "❌ Échec ${env.ANSIBLE_ROLE}"
-            }
-            cleanup {
-                cleanWs()
-            }
+    }
+    
+    return credentialInfo
+}
+
+/**
+ * Prépare les variables Ansible pour l'exécution
+ */
+private def prepareAnsibleVars(Map config) {
+    echo "🔧 Préparation des variables Ansible"
+    
+    // Variables système automatiques
+    def systemVars = [
+        'jenkins_build_number': env.BUILD_NUMBER,
+        'jenkins_build_url': env.BUILD_URL,
+        'jenkins_job_name': env.JOB_NAME,
+        'deployment_timestamp': new Date().format('yyyy-MM-dd_HH-mm-ss'),
+        'deployed_by': env.BUILD_USER ?: 'jenkins'
+    ]
+    
+    // Fusion des variables système avec les variables utilisateur
+    config.ansibleVars = systemVars + config.ansibleVars
+    
+    echo "📝 Variables finales:"
+    config.ansibleVars.each { key, value ->
+        if (key.toLowerCase().contains('password') || key.toLowerCase().contains('secret')) {
+            echo "   ${key}: *** (masqué)"
+        } else {
+            echo "   ${key}: ${value}"
         }
     }
 }
 
-// Fonction helper pour exécution Ansible
-def executeAnsiblePlaybook(Map config) {
-    def cmd = """
-        cd ${env.ANSIBLE_DIR}
-        
-        ansible-playbook \\
-            -i inventory/hosts.ini \\
-            playbooks/${env.PLAYBOOK} \\
-            --limit ${env.TARGET}
-    """
+/**
+ * Exécute le playbook Ansible avec les bons credentials
+ */
+private def executeAnsiblePlaybookWithCredentials(Map config) {
+    def credInfo = config.credentialInfo
     
-    if (env.EXTRA_VARS.trim()) {
-        cmd += " -e \"${env.EXTRA_VARS}\""
+    if (credInfo.mixedEnvironment) {
+        echo "🔄 Exécution en environnement mixte"
+        executePlaybookMixedEnvironment(config)
+    } else if (credInfo.hasWindows) {
+        echo "🪟 Exécution pour serveurs Windows"
+        executePlaybookWindows(config)
+    } else {
+        echo "🐧 Exécution pour serveurs Linux"
+        executePlaybookLinux(config)
     }
-    
-    if (env.ANSIBLE_OPTIONS.trim()) {
-        cmd += " ${env.ANSIBLE_OPTIONS}"
-    }
-    
-    echo "Commande Ansible:"
-    echo cmd
-    
+}
+
+/**
+ * Exécution pour serveurs Linux
+ */
+private def executePlaybookLinux(Map config) {
     withCredentials([
-        file(credentialsId: config.sshKeyCredentialsId ?: 'ssh-key-ansible-user-secret-file', variable: 'SSH_PRIVATE_KEY_FILE'),
-        string(credentialsId: config.tokenCredentialsId ?: 'ha-long-lived-token', variable: 'HA_TOKEN')
+        sshUserPrivateKey(
+            credentialsId: config.credentialInfo.linuxCredentialId,
+            keyFileVariable: 'SSH_KEY_FILE',
+            usernameVariable: 'SSH_USER'
+        )
     ]) {
+        executePlaybook(config, 'linux')
+    }
+}
+
+/**
+ * Exécution pour serveurs Windows
+ */
+private def executePlaybookWindows(Map config) {
+    withCredentials([
+        usernamePassword(
+            credentialsId: config.credentialInfo.windowsCredentialId,
+            usernameVariable: 'WIN_USER',
+            passwordVariable: 'WIN_PASSWORD'
+        )
+    ]) {
+        // Configuration des variables d'environnement pour Windows
+        env.ANSIBLE_CONNECTION = 'winrm'
+        env.ANSIBLE_WINRM_TRANSPORT = 'ntlm'
+        env.ANSIBLE_WINRM_SERVER_CERT_VALIDATION = 'ignore'
         
-        if (env.ANSIBLE_ROLE == 'homeassistant' && env.EXTRA_VARS.contains('ha_long_lived_token')) {
-            cmd = cmd.replace('ha_long_lived_token=PLACEHOLDER', "ha_long_lived_token=\${HA_TOKEN}")
+        executePlaybook(config, 'windows')
+    }
+}
+
+/**
+ * Exécution en environnement mixte (Linux + Windows)
+ */
+private def executePlaybookMixedEnvironment(Map config) {
+    withCredentials([
+        sshUserPrivateKey(
+            credentialsId: config.credentialInfo.linuxCredentialId,
+            keyFileVariable: 'SSH_KEY_FILE',
+            usernameVariable: 'SSH_USER'
+        ),
+        usernamePassword(
+            credentialsId: config.credentialInfo.windowsCredentialId,
+            usernameVariable: 'WIN_USER',
+            passwordVariable: 'WIN_PASSWORD'
+        )
+    ]) {
+        echo "🔄 Configuration pour environnement mixte"
+        executePlaybook(config, 'mixed')
+    }
+}
+
+/**
+ * Exécute le playbook Ansible avec les paramètres appropriés
+ */
+private def executePlaybook(Map config, String serverType) {
+    // Construction des paramètres de base
+    def playbookParams = [
+        playbook: config.playbook,
+        inventory: config.inventory,
+        limit: config.targetServers,
+        disableHostKeyChecking: true,
+        colorized: true,
+        become: config.become,
+        becomeUser: config.becomeUser,
+        forks: config.forks
+    ]
+    
+    // Configuration spécifique selon le type de serveur
+    switch(serverType) {
+        case 'linux':
+            playbookParams.credentialsId = config.credentialInfo.linuxCredentialId
+            break
+        case 'windows':
+            // Pour Windows, utilisation des variables d'environnement
+            playbookParams.become = false  // Pas de sudo sur Windows
+            break
+        case 'mixed':
+            // En environnement mixte, utiliser le credential Linux par défaut
+            // Les credentials Windows sont gérés via les variables d'environnement
+            playbookParams.credentialsId = config.credentialInfo.linuxCredentialId
+            break
+    }
+    
+    // Ajout des tags si spécifiés
+    if (config.tags) {
+        playbookParams.tags = config.tags
+        echo "🏷️  Tags appliqués: ${config.tags}"
+    }
+    
+    // Construction des variables extra avec HOST automatique
+    def allVars = config.ansibleVars ?: [:]
+    
+    // Ajout automatique de la variable HOST depuis TARGET_SERVERS
+    allVars['HOST'] = config.targetServers
+    echo "🎯 Variable HOST ajoutée: ${config.targetServers}"
+    
+    if (allVars) {
+        def extraVarsString = allVars.collect { k, v -> "${k}=${v}" }.join(' ')
+        playbookParams.extraVars = [
+            extraVars: extraVarsString
+        ]
+        echo "🔧 Variables extra: ${extraVarsString}"
+    }
+    
+    // Mode check si demandé
+    if (config.checkMode) {
+        playbookParams.check = true
+        echo "🔍 Mode check activé - Aucune modification ne sera appliquée"
+    }
+    
+    // Verbosité
+    if (config.verbose) {
+        playbookParams.verbose = true
+        echo "📢 Mode verbose activé"
+    }
+    
+    echo "🎯 Exécution sur les serveurs: ${config.targetServers}"
+    echo "📋 Playbook: ${config.playbook}"
+    echo "🖥️  Type de serveurs: ${serverType}"
+    
+    // Timeout avec gestion d'erreur
+    timeout(time: config.timeout, unit: 'SECONDS') {
+        try {
+            // Utilisation du plugin Ansible Jenkins
+            ansiblePlaybook(playbookParams)
+            echo "✅ Playbook exécuté avec succès"
+        } catch (Exception e) {
+            error("❌ Échec de l'exécution du playbook: ${e.message}")
         }
-        
-        sh """
-            echo "=== ANSIBLE SHARED LIBRARY EXECUTION ==="
-            echo "Rôle: ${env.ANSIBLE_ROLE}"
-            echo "Target: ${env.TARGET}"
-            echo ""
-            
-            ${cmd}
-            
-            echo ""
-            echo "=== TERMINÉ ==="
-        """
     }
 }
