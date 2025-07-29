@@ -25,6 +25,9 @@ def call(Map config = [:]) {
         // Préparation des données pour la notification
         def notificationData = prepareNotificationData(config)
         
+        // Génération du rapport
+        generateReport(notificationData)
+        
         // Envoi des notifications selon la configuration
         if (config.sendEmail) {
             sendEmailNotification(notificationData)
@@ -68,7 +71,53 @@ private def prepareNotificationData(Map config) {
 }
 
 /**
- * Envoi de notification par email
+ * Génère un rapport détaillé du déploiement
+ */
+private def generateReport(Map data) {
+    try {
+        def report = """
+=== RAPPORT DÉPLOIEMENT ANSIBLE ===
+Playbook: ${data.playbook}
+Serveurs Cibles: ${data.targetServers}
+Statut: ${data.statusText} (${data.status})
+Durée: ${data.duration}
+Timestamp: ${data.timestamp}
+Déclenché par: ${data.jenkins.buildUser}
+Build Jenkins: #${data.jenkins.buildNumber}
+URL Build: ${data.jenkins.buildUrl}
+
+Variables Ansible:${data.ansibleVars ? formatVarsForReport(data.ansibleVars) : ' Aucune'}
+
+${data.error ? "Erreur:\n${data.error}" : 'Aucune erreur'}
+=====================================
+        """
+        
+        writeFile file: 'ansible_deployment_report.txt', text: report
+        archiveArtifacts artifacts: 'ansible_deployment_report.txt', allowEmptyArchive: true
+        
+        echo "✅ Rapport généré: ansible_deployment_report.txt"
+    } catch (Exception e) {
+        echo "⚠️ Erreur lors de la génération du rapport: ${e.message}"
+    }
+}
+
+/**
+ * Formate les variables pour le rapport
+ */
+private def formatVarsForReport(Map vars) {
+    def formatted = ""
+    vars.each { key, value ->
+        if (key.toLowerCase().contains('password') || key.toLowerCase().contains('secret')) {
+            formatted += "\n  - ${key}: *** (masqué)"
+        } else {
+            formatted += "\n  - ${key}: ${value}"
+        }
+    }
+    return formatted
+}
+
+/**
+ * Envoi de notification par email - CORRIGÉ
  */
 private def sendEmailNotification(Map data) {
     try {
@@ -76,12 +125,10 @@ private def sendEmailNotification(Map data) {
         def body = buildEmailBody(data)
         def recipients = getEmailRecipients(data.status)
         
-        emailext(
-            subject: subject,
-            body: body,
-            to: recipients,
-            mimeType: 'text/html'
-        )
+        // CORRECTION: Utilisation de mail au lieu d'emailext
+        mail to: recipients,
+             subject: subject,
+             body: body
         
         echo "✅ Email envoyé à: ${recipients}"
     } catch (Exception e) {
@@ -90,46 +137,46 @@ private def sendEmailNotification(Map data) {
 }
 
 /**
- * Construction du corps de l'email
+ * Construction du corps de l'email - TEMPLATE HTML CONSERVÉ
  */
 private def buildEmailBody(Map data) {
     def template = """
-    <html>
-    <head>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .header { background: ${data.statusColor}; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; }
-            .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            .info-table th, .info-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-            .info-table th { background-color: #f2f2f2; }
-            .error-box { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; border-radius: 5px; }
-            .vars-box { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>${data.statusEmoji} Déploiement Ansible ${data.statusText}</h1>
-        </div>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .header { background: ${data.statusColor}; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .info-table th, .info-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        .info-table th { background-color: #f2f2f2; }
+        .error-box { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .vars-box { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>${data.statusEmoji} Déploiement Ansible ${data.statusText}</h1>
+    </div>
+    
+    <div class="content">
+        <h2>Détails du Déploiement</h2>
         
-        <div class="content">
-            <h2>Détails du Déploiement</h2>
-            
-            <table class="info-table">
-                <tr><th>Playbook</th><td>${data.playbook}</td></tr>
-                <tr><th>Serveurs Cibles</th><td>${data.targetServers}</td></tr>
-                <tr><th>Status</th><td>${data.statusText}</td></tr>
-                <tr><th>Durée</th><td>${data.duration}</td></tr>
-                <tr><th>Timestamp</th><td>${data.timestamp}</td></tr>
-                <tr><th>Déclenché par</th><td>${data.jenkins.buildUser}</td></tr>
-                <tr><th>Build Jenkins</th><td><a href="${data.jenkins.buildUrl}">#${data.jenkins.buildNumber}</a></td></tr>
-            </table>
-            
-            ${data.ansibleVars ? buildVarsSection(data.ansibleVars) : ''}
-            ${data.error ? buildErrorSection(data.error) : ''}
-        </div>
-    </body>
-    </html>
+        <table class="info-table">
+            <tr><th>Playbook</th><td>${data.playbook}</td></tr>
+            <tr><th>Serveurs Cibles</th><td>${data.targetServers}</td></tr>
+            <tr><th>Status</th><td>${data.statusText}</td></tr>
+            <tr><th>Durée</th><td>${data.duration}</td></tr>
+            <tr><th>Timestamp</th><td>${data.timestamp}</td></tr>
+            <tr><th>Déclenché par</th><td>${data.jenkins.buildUser}</td></tr>
+            <tr><th>Build Jenkins</th><td><a href="${data.jenkins.buildUrl}">#${data.jenkins.buildNumber}</a></td></tr>
+        </table>
+        
+        ${data.ansibleVars ? buildVarsSection(data.ansibleVars) : ''}
+        ${data.error ? buildErrorSection(data.error) : ''}
+    </div>
+</body>
+</html>
     """
     
     return template
