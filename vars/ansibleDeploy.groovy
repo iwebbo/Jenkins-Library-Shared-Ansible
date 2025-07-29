@@ -200,10 +200,23 @@ private def prepareAnsibleVars(Map config) {
         'deployed_by': env.BUILD_USER ?: 'jenkins'
     ]
     
-    // Fusion des variables système avec les variables utilisateur
+    // Conversion String vers Map si nécessaire
     if (config.ansibleVars instanceof String) {
-    // Change var string to var map
-    config.ansibleVars = systemVars
+        echo "🔄 Conversion des variables String vers Map"
+        def userVars = [:]
+        
+        config.ansibleVars.split('\n').each { line ->
+            line = line.trim()
+            if (line && line.contains('=')) {
+                def parts = line.split('=', 2)
+                if (parts.length == 2) {
+                    userVars[parts[0].trim()] = parts[1].trim()
+                }
+            }
+        }
+        
+        echo "🔧 Variables utilisateur parsées: ${userVars}"
+        config.ansibleVars = systemVars + userVars  // ← Fusion des deux Maps
     } else {
         config.ansibleVars = systemVars + config.ansibleVars
     }
