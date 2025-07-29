@@ -38,6 +38,13 @@ def call(Map config = [:]) {
     // Fusion des configurations
     config = defaultConfig + config
     
+    if (!config.playbook.contains('/')) {
+    // config.playbook contient juste 'site.yml'
+    // defaultConfig.playbook contient 'playbook'
+    config.playbook = "${defaultConfig.playbook}/${config.playbook}"
+    echo "📋 Path playbook construit: ${config.playbook}"
+    }
+
     echo "🚀 Début du déploiement Ansible"
     echo "📋 Playbook: ${config.playbook}"
     echo "🎯 Target Servers: ${config.targetServers}"
