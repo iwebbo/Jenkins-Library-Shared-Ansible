@@ -130,8 +130,8 @@ private def detectServerCredentials(String targetServers, String inventory) {
     def credentialInfo = [
         hasWindows: false,
         hasLinux: false,
-        windowsCredentialId: 'windows-ansible-creds',
-        linuxCredentialId: 'linux-ansible-creds',
+        windowsCredentialId: 'credentials-id-windows-user-password',
+        linuxCredentialId: 'ssh-key-ansible-user-secret-file',
         mixedEnvironment: false
     ]
     
@@ -189,8 +189,6 @@ private def detectServerCredentials(String targetServers, String inventory) {
  * Prépare les variables Ansible pour l'exécution
  */
 private def prepareAnsibleVars(Map config) {
-    echo "🔧 Préparation des variables Ansible"
-    
     // Variables système automatiques
     def systemVars = [
         'jenkins_build_number': env.BUILD_NUMBER,
@@ -214,8 +212,6 @@ private def prepareAnsibleVars(Map config) {
                 }
             }
         }
-        
-        echo "🔧 Variables utilisateur parsées: ${userVars}"
         config.ansibleVars = systemVars + userVars  // ← Fusion des deux Maps
     } else {
         config.ansibleVars = systemVars + config.ansibleVars
