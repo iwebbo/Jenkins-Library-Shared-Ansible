@@ -21,9 +21,9 @@ def call(Map config = [:]) {
     def defaultConfig = [
         ansible_path: '', //Path folder of bin ansible
         config_path: '.', // Path folder of Ansible.cfg
-        inventory: 'inventory',
+        inventory: '',
         targetServers: '',
-        playbook: 'playbook',
+        playbook: '',
         ansibleVars: [:],
         tags: '',
         checkMode: false,
@@ -38,16 +38,17 @@ def call(Map config = [:]) {
     // Fusion des configurations
     config = defaultConfig + config
     
-    if (!config.playbook.contains('/')) {
-    // config.playbook contient juste 'site.yml'
-    // defaultConfig.playbook contient 'playbook'
-    config.playbook = "${defaultConfig.playbook}/${config.playbook}"
-    echo "📋 Path playbook construit: ${config.playbook}"
-    }
+
+    // // A delete gérér directement dans le fichier ansible.cfg
+    // if (!config.playbook.contains('/')) {
+    // // config.playbook contient juste 'site.yml'
+    // // defaultConfig.playbook contient 'playbook'
+    // config.playbook = "${defaultConfig.playbook}/${config.playbook}"
+    // }
 
     echo "🚀 Début du déploiement Ansible"
-    echo "📋 Playbook: ${config.playbook}"
-    echo "🎯 Target Servers: ${config.targetServers}"
+    echo "Playbook: ${config.playbook}"
+    echo "Target Servers: ${config.targetServers}"
     if (config.ansibleVars) {
         echo "🔧 Variables Ansible: ${config.ansibleVars}"
     }
