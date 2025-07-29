@@ -32,19 +32,16 @@ private def validatePlaybookSyntax(String playbook) {
     script {
         try {
             sh """
-                pwd
-                ls -lath
-                ls -lath ansible/
-                if [ -f "${playbook}" ]; then
-                    ansible-playbook --syntax-check "${playbook}"
+                if [ -f "playbook/${playbook}" ]; then
+                    ansible-playbook --syntax-check "playbook/${playbook}"
                     echo "✅ Syntaxe du playbook valide"
                 else
-                    echo "❌ Playbook ${playbook} non trouvé"
+                    echo "❌ Playbook playbook/${playbook} non trouvé"
                     exit 1
                 fi
             """
         } catch (Exception e) {
-            error("❌ Erreur de syntaxe dans le playbook ${playbook}: ${e.message}")
+            error("❌ Erreur de syntaxe dans le playbook playbook/${playbook}: ${e.message}")
         }
     }
 }
@@ -58,16 +55,16 @@ private def validateInventory(String inventory) {
     script {
         try {
             sh """
-                if [ -f "${inventory}" ] || [ -d "${inventory}" ]; then
-                    ansible-inventory -i "${inventory}" --list > /dev/null
+                if [ -f "inventory/${inventory}" ] || [ -d "inventory/${inventory}" ]; then
+                    ansible-inventory -i "inventory/${inventory}" --list > /dev/null
                     echo "✅ Inventaire valide"
                 else
-                    echo "❌ Inventaire ${inventory} non trouvé"
+                    echo "❌ Inventaire inventory/${inventory} non trouvé"
                     exit 1
                 fi
             """
         } catch (Exception e) {
-            error("❌ Erreur dans l'inventaire ${inventory}: ${e.message}")
+            error("❌ Erreur dans l'inventaire inventory/${inventory}: ${e.message}")
         }
     }
 }
