@@ -11,10 +11,10 @@
 def call(Map config = [:]) {
     // Validation des paramètres obligatoires
     if (!config.playbook) {
-        error("Le paramètre 'playbook' est obligatoire")
+        error("Parameters 'playbook' mandatory")
     }
     if (!config.targetServers) {
-        error("Le paramètre 'targetServers' est obligatoire")
+        error("Parameters 'targetServers' mandatory")
     }
     
     // Configuration par défaut
@@ -37,18 +37,18 @@ def call(Map config = [:]) {
 
     config = defaultConfig + config
 
-    echo "🚀 Début du déploiement Ansible"
+    echo "Starting of Deployment Ansible"
     echo "Playbook: ${config.playbook}"
     echo "Target Servers: ${config.targetServers}"
     if (config.ansibleVars) {
-        echo "🔧 Variables Ansible: ${config.ansibleVars}"
+        echo "Var Ansible: ${config.ansibleVars}"
     }
     
     try {
         // Étape 1: Détection du type de serveurs et credentials
         stage('Détection Credentials') {
             config.credentialInfo = detectServerCredentials(config.targetServers, config.inventory)
-            echo "🔑 Credentials détectés: ${config.credentialInfo}"
+            echo "🔑 Credentials detected: ${config.credentialInfo}"
         }
         
         // Étape 2: Validation
@@ -146,15 +146,13 @@ private def detectServerCredentials(String targetServers, String inventory) {
                 returnStdout: true
             ).trim()
             
-            echo "ℹ️  Informations serveurs: ${serverInfo}"
-            
             // Détection Windows (recherche de patterns Windows)
             if (serverInfo.toLowerCase().contains('windows') || 
                 serverInfo.toLowerCase().contains('win') ||
                 targetServers.toLowerCase().contains('win') ||
                 targetServers.toLowerCase().contains('windows')) {
                 credentialInfo.hasWindows = true
-                echo "🪟 Serveurs Windows détectés"
+                echo "Windows Server detected"
             }
             
             // Détection Linux (par défaut ou patterns Linux)
@@ -167,17 +165,17 @@ private def detectServerCredentials(String targetServers, String inventory) {
                 targetServers.toLowerCase().contains('db') ||
                 !credentialInfo.hasWindows) {  // Par défaut = Linux
                 credentialInfo.hasLinux = true
-                echo "🐧 Serveurs Linux détectés"
+                echo "Linux Server detected"
             }
             
             // Environnement mixte
             if (credentialInfo.hasWindows && credentialInfo.hasLinux) {
                 credentialInfo.mixedEnvironment = true
-                echo "🔄 Environnement mixte détecté (Windows + Linux)"
+                echo "Both detected Windows & Linux"
             }
             
         } catch (Exception e) {
-            echo "⚠️  Impossible de détecter le type de serveurs, utilisation Linux par défaut: ${e.message}"
+            echo "⚠️  Not possible to define OS, Linux by default: ${e.message}"
             credentialInfo.hasLinux = true
         }
     }
@@ -189,18 +187,8 @@ private def detectServerCredentials(String targetServers, String inventory) {
  * Prépare les variables Ansible pour l'exécution
  */
 private def prepareAnsibleVars(Map config) {
-    // Variables système automatiques
-    def systemVars = [
-        'jenkins_build_number': env.BUILD_NUMBER,
-        'jenkins_build_url': env.BUILD_URL,
-        'jenkins_job_name': env.JOB_NAME,
-        'deployment_timestamp': new Date().format('yyyy-MM-dd_HH-mm-ss'),
-        'deployed_by': env.BUILD_USER ?: 'jenkins'
-    ]
-    
     // Conversion String vers Map si nécessaire
     if (config.ansibleVars instanceof String) {
-        echo "🔄 Conversion des variables String vers Map"
         def userVars = [:]
         
         config.ansibleVars.split('\n').each { line ->
@@ -212,9 +200,9 @@ private def prepareAnsibleVars(Map config) {
                 }
             }
         }
-        config.ansibleVars = systemVars + userVars  // ← Fusion des deux Maps
+        config.ansibleVars = userVars  // ← Fusion des deux Maps
     } else {
-        config.ansibleVars = systemVars + config.ansibleVars
+        config.ansibleVars = config.ansibleVars
     }
 }
 
@@ -225,13 +213,10 @@ private def executeAnsiblePlaybookWithCredentials(Map config) {
     def credInfo = config.credentialInfo
     
     if (credInfo.mixedEnvironment) {
-        echo "🔄 Exécution en environnement mixte"
         executePlaybookMixedEnvironment(config)
     } else if (credInfo.hasWindows) {
-        echo "🪟 Exécution pour serveurs Windows"
         executePlaybookWindows(config)
     } else {
-        echo "🐧 Exécution pour serveurs Linux"
         executePlaybookLinux(config)
     }
 }
@@ -264,7 +249,7 @@ private def executePlaybookWindows(Map config) {
     ]) {
         // Configuration des variables d'environnement pour Windows
         env.ANSIBLE_CONNECTION = 'winrm'
-        env.ANSIBLE_WINRM_TRANSPORT = 'ntlm'
+        env.ANSIBLE_WINRM_TRANSPORT = 'basic'
         env.ANSIBLE_WINRM_SERVER_CERT_VALIDATION = 'ignore'
         
         executePlaybook(config, 'windows')
@@ -287,7 +272,6 @@ private def executePlaybookMixedEnvironment(Map config) {
             passwordVariable: 'WIN_PASSWORD'
         )
     ]) {
-        echo "🔄 Configuration pour environnement mixte"
         executePlaybook(config, 'mixed')
     }
 }
@@ -335,14 +319,12 @@ private def executePlaybook(Map config, String serverType) {
     
     // Ajout automatique de la variable HOST depuis TARGET_SERVERS
     allVars['HOST'] = config.targetServers
-    echo "🎯 Variable HOST ajoutée: ${config.targetServers}"
     
     if (allVars) {
         def extraVarsString = allVars.collect { k, v -> "${k}=${v}" }.join(' ')
         playbookParams.extraVars = [
             extraVars: extraVarsString
         ]
-        echo "🔧 Variables extra: ${extraVarsString}"
     }
     
     // Mode check si demandé
