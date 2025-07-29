@@ -246,12 +246,7 @@ private def executePlaybookWindows(Map config) {
             usernameVariable: 'WIN_USER',
             passwordVariable: 'WIN_PASSWORD'
         )
-    ]) {
-        // Configuration des variables d'environnement pour Windows
-        env.ANSIBLE_CONNECTION = 'winrm'
-        env.ANSIBLE_WINRM_TRANSPORT = 'basic'
-        env.ANSIBLE_WINRM_SERVER_CERT_VALIDATION = 'ignore'
-        
+    ]) {        
         executePlaybook(config, 'windows')
     }
 }
@@ -280,74 +275,100 @@ private def executePlaybookMixedEnvironment(Map config) {
  * Exécute le playbook Ansible avec les paramètres appropriés
  */
 private def executePlaybook(Map config, String serverType) {
-    // Construction des paramètres de base
-    def playbookParams = [
-        playbook: config.playbook,
-        inventory: config.inventory,
-        limit: config.targetServers,
-        disableHostKeyChecking: true,
-        colorized: true,
-        become: config.become,
-        becomeUser: config.becomeUser,
-        forks: config.forks
-    ]
+    // Construction de la commande ansible-playbook
+    def ansibleCommand = "ansible-playbook"
     
-    // Configuration spécifique selon le type de serveur
-    switch(serverType) {
-        case 'linux':
-            playbookParams.credentialsId = config.credentialInfo.linuxCredentialId
-            break
-        case 'windows':
-            // Pour Windows, utilisation des variables d'environnement
-            playbookParams.become = false  // Pas de sudo sur Windows
-            break
-        case 'mixed':
-            // En environnement mixte, utiliser le credential Linux par défaut
-            // Les credentials Windows sont gérés via les variables d'environnement
-            playbookParams.credentialsId = config.credentialInfo.linuxCredentialId
-            break
+    // Ajout du playbook
+    ansibleCommand += " ${config.playbook}"
+    
+    // Ajout de l'inventaire
+    ansibleCommand += " -i ${config.inventory}"
+    
+    // Limitation aux serveurs cibles
+    ansibleCommand += " -l ${config.targetServers}"
+    
+    // Gestion des privilèges (become)
+    if (config.become && serverType != 'windows') {
+        ansibleCommand += " --become"
+        if (config.becomeUser) {
+            ansibleCommand += " --become-user=${config.becomeUser}"
+        }
     }
     
     // Ajout des tags si spécifiés
     if (config.tags) {
-        playbookParams.tags = config.tags
+        ansibleCommand += " --tags '${config.tags}'"
         echo "🏷️  Tags appliqués: ${config.tags}"
     }
     
-    // Construction des variables extra avec HOST automatique
+    // Mode check si demandé
+    if (config.checkMode) {
+        ansibleCommand += " --check"
+        echo "🔍 Mode check activé - Aucune modification ne sera appliquée"
+    }
+    
+    // Verbosité
+    if (config.verbose) {
+        ansibleCommand += " -vvv"
+        echo "📢 Mode verbose activé"
+    }
+    
+    // Construction des variables extra
     def allVars = config.ansibleVars ?: [:]
     
     // Ajout automatique de la variable HOST depuis TARGET_SERVERS
     allVars['HOST'] = config.targetServers
     
     if (allVars) {
-        def extraVarsString = allVars.collect { k, v -> "${k}=${v}" }.join(' ')
-        playbookParams.extraVars = [
-            extraVars: extraVarsString
-        ]
+        def extraVarsString = allVars.collect { k, v -> 
+            "${k}='${v}'"
+        }.join(' ')
+        ansibleCommand += " --extra-vars \"${extraVarsString}\""
     }
     
-    // Mode check si demandé
-    if (config.checkMode) {
-        playbookParams.check = true
-        echo "🔍 Mode check activé - Aucune modification ne sera appliquée"
+    // Configuration spécifique selon le type de serveur
+    switch(serverType) {
+        case 'linux':
+            // Pour Linux, configuration SSH minimale
+            ansibleCommand = """
+                export ANSIBLE_PRIVATE_KEY_FILE="\${SSH_KEY_FILE}"
+                ${ansibleCommand}
+            """
+            break
+            
+        case 'windows':
+            // Pour Windows, configuration WinRM
+            ansibleCommand = """
+                export ansible_user="\${WIN_USER}"
+                export ansible_password="\${WIN_PASSWORD}"
+                ${ansibleCommand}
+            """
+            break
+            
+        case 'mixed':
+            // Pour environnement mixte, configuration pour les deux
+            ansibleCommand = """
+                export ANSIBLE_PRIVATE_KEY_FILE="\${SSH_KEY_FILE}"
+                export ansible_user="\${WIN_USER}"
+                export ansible_password="\${WIN_PASSWORD}"
+                ${ansibleCommand}
+            """
+            break
     }
-    
-    // Verbosité
-    if (config.verbose) {
-        playbookParams.verbose = true
-        echo "📢 Mode verbose activé"
-    }
-    
-    echo "🎯 Exécution sur les serveurs: ${config.targetServers}"
-    echo "📋 Playbook: ${config.playbook}"
-    echo "🖥️  Type de serveurs: ${serverType}"
     
     // Timeout avec gestion d'erreur
     timeout(time: config.timeout, unit: 'SECONDS') {
         try {
-            // Utilisation du plugin Ansible Jenkins
-            ansiblePlaybook(playbookParams)
+            // Exécution de la commande shell
+            def result = sh(
+                script: ansibleCommand,
+                returnStatus: true
+            )
+            
+            if (result != 0) {
+                error("❌ Échec de l'exécution du playbook Ansible (code retour: ${result})")
+            }
+            
             echo "✅ Playbook exécuté avec succès"
         } catch (Exception e) {
             error("❌ Échec de l'exécution du playbook: ${e.message}")
