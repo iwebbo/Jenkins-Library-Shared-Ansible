@@ -1,8 +1,8 @@
 package com.company.ansible
 
 /**
- * Classe helper pour les opérations Ansible avancées
- * Utilisable dans les shared libraries Jenkins
+ * Helper class for advanced Ansible operations
+ * Usable in Jenkins shared libraries
  */
 class AnsibleHelper implements Serializable {
     
@@ -13,10 +13,10 @@ class AnsibleHelper implements Serializable {
     }
     
     /**
-     * Valide la connectivité vers les serveurs cibles
+     * Validates connectivity to target servers
      */
     def validateConnectivity(String targetServers, String inventory) {
-        script.echo "🔗 Test de connectivité vers: ${targetServers}"
+        script.echo "🔗 Testing connectivity to: ${targetServers}"
         
         try {
             def result = script.sh(
@@ -24,19 +24,19 @@ class AnsibleHelper implements Serializable {
                 returnStdout: true
             ).trim()
             
-            script.echo "✅ Connectivité OK"
+            script.echo "✅ Connectivity OK"
             return [success: true, output: result]
         } catch (Exception e) {
-            script.echo "❌ Problème de connectivité: ${e.message}"
+            script.echo "❌ Connectivity issue: ${e.message}"
             return [success: false, error: e.message]
         }
     }
     
     /**
-     * Récupère les informations système des serveurs cibles
+     * Gathers system information from target servers
      */
     def gatherServerInfo(String targetServers, String inventory) {
-        script.echo "📋 Collecte d'informations sur: ${targetServers}"
+        script.echo "📋 Collecting information from: ${targetServers}"
         
         try {
             def result = script.sh(
@@ -48,13 +48,13 @@ class AnsibleHelper implements Serializable {
             
             return parseServerInfo(result)
         } catch (Exception e) {
-            script.echo "⚠️  Impossible de collecter les informations: ${e.message}"
+            script.echo "⚠️  Unable to collect information: ${e.message}"
             return [:]
         }
     }
     
     /**
-     * Parse les informations serveurs depuis la sortie Ansible
+     * Parses server information from Ansible output
      */
     private def parseServerInfo(String output) {
         def serverInfo = [:]
@@ -66,7 +66,7 @@ class AnsibleHelper implements Serializable {
                     def hostname = parts[0].trim()
                     def info = parts[1].trim()
                     
-                    // Extraction des informations OS
+                    // Extract OS information
                     def osFamily = extractValue(info, 'ansible_os_family')
                     def distribution = extractValue(info, 'ansible_distribution')
                     
@@ -84,7 +84,7 @@ class AnsibleHelper implements Serializable {
     }
     
     /**
-     * Extrait une valeur spécifique depuis une chaîne JSON-like
+     * Extracts a specific value from a JSON-like string
      */
     private def extractValue(String text, String key) {
         def pattern = /"${key}":\s*"([^"]+)"/
@@ -93,10 +93,10 @@ class AnsibleHelper implements Serializable {
     }
     
     /**
-     * Détermine les credentials appropriés selon le type de serveurs
+     * Determines appropriate credentials based on server types
      */
     def determineCredentials(String targetServers, String inventory) {
-        script.echo "🔑 Détermination des credentials pour: ${targetServers}"
+        script.echo "🔑 Determining credentials for: ${targetServers}"
         
         def serverInfo = gatherServerInfo(targetServers, inventory)
         def credentialInfo = [
@@ -108,40 +108,40 @@ class AnsibleHelper implements Serializable {
             serverDetails: serverInfo
         ]
         
-        // Analyse des serveurs
+        // Analyze servers
         serverInfo.each { hostname, info ->
             if (info.is_windows) {
                 credentialInfo.hasWindows = true
-                script.echo "🪟 Serveur Windows détecté: ${hostname}"
+                script.echo "🪟 Windows server detected: ${hostname}"
             } else {
                 credentialInfo.hasLinux = true
-                script.echo "🐧 Serveur Linux détecté: ${hostname}"
+                script.echo "🐧 Linux server detected: ${hostname}"
             }
         }
         
-        // Détection par nom si pas d'informations système
+        // Detection by name if no system information available
         if (!credentialInfo.hasWindows && !credentialInfo.hasLinux) {
             if (targetServers.toLowerCase().contains('win') || 
                 targetServers.toLowerCase().contains('windows')) {
                 credentialInfo.hasWindows = true
-                script.echo "🪟 Windows détecté par nom: ${targetServers}"
+                script.echo "🪟 Windows detected by name: ${targetServers}"
             } else {
                 credentialInfo.hasLinux = true
-                script.echo "🐧 Linux par défaut: ${targetServers}"
+                script.echo "🐧 Linux by default: ${targetServers}"
             }
         }
         
-        // Environnement mixte
+        // Mixed environment
         if (credentialInfo.hasWindows && credentialInfo.hasLinux) {
             credentialInfo.mixedEnvironment = true
-            script.echo "🔄 Environnement mixte détecté"
+            script.echo "🔄 Mixed environment detected"
         }
         
         return credentialInfo
     }
     
     /**
-     * Construit les paramètres extra-vars pour Ansible
+     * Builds extra-vars parameters for Ansible
      */
     def buildExtraVars(Map ansibleVars) {
         if (!ansibleVars) {
@@ -151,7 +151,7 @@ class AnsibleHelper implements Serializable {
         def extraVars = []
         
         ansibleVars.each { key, value ->
-            // Échappement des valeurs avec espaces ou caractères spéciaux
+            // Escape values with spaces or special characters
             def escapedValue = value.toString()
             if (escapedValue.contains(' ') || escapedValue.contains('"')) {
                 escapedValue = "\"${escapedValue.replace('"', '\\"')}\""
@@ -163,7 +163,7 @@ class AnsibleHelper implements Serializable {
     }
     
     /**
-     * Valide les noms de variables Ansible
+     * Validates Ansible variable names
      */
     def validateVariableNames(Map ansibleVars) {
         def invalidVars = []
@@ -175,17 +175,17 @@ class AnsibleHelper implements Serializable {
         }
         
         if (invalidVars) {
-            script.error("❌ Variables Ansible invalides: ${invalidVars.join(', ')}")
+            script.error("❌ Invalid Ansible variables: ${invalidVars.join(', ')}")
         }
         
-        script.echo "✅ Toutes les variables Ansible sont valides"
+        script.echo "✅ All Ansible variables are valid"
     }
     
     /**
-     * Génère un rapport de déploiement
+     * Generates a deployment report
      */
     def generateDeploymentReport(Map config, def startTime, def endTime, def status) {
-        def duration = (endTime - startTime) / 1000  // en secondes
+        def duration = (endTime - startTime) / 1000  // in seconds
         
         def report = [
             playbook: config.playbook,
@@ -203,25 +203,25 @@ class AnsibleHelper implements Serializable {
             ]
         ]
         
-        script.echo "📊 Rapport de déploiement généré"
+        script.echo "📊 Deployment report generated"
         return report
     }
     
     /**
-     * Sauvegarde le rapport de déploiement
+     * Saves the deployment report
      */
     def saveDeploymentReport(Map report) {
         try {
             def reportJson = groovy.json.JsonBuilder(report).toPrettyString()
             script.writeFile file: 'deployment-report.json', text: reportJson
-            script.echo "💾 Rapport sauvegardé: deployment-report.json"
+            script.echo "💾 Report saved: deployment-report.json"
         } catch (Exception e) {
-            script.echo "⚠️  Impossible de sauvegarder le rapport: ${e.message}"
+            script.echo "⚠️  Unable to save report: ${e.message}"
         }
     }
     
     /**
-     * Formate les logs Ansible pour une meilleure lisibilité
+     * Formats Ansible output for better readability
      */
     def formatAnsibleOutput(String output) {
         def lines = output.split('\n')
@@ -247,27 +247,178 @@ class AnsibleHelper implements Serializable {
     }
     
     /**
-     * Vérifie les prérequis Ansible
+     * Checks Ansible prerequisites
      */
     def checkPrerequisites() {
-        script.echo "🔍 Vérification des prérequis Ansible"
+        script.echo "🔍 Checking Ansible prerequisites"
         
         try {
-            // Vérification de la version Ansible
+            // Check Ansible version
             def version = script.sh(
                 script: "ansible --version | head -n1",
                 returnStdout: true
             ).trim()
             script.echo "✅ ${version}"
             
-            // Vérification de ansible-playbook
+            // Check ansible-playbook availability
             script.sh "which ansible-playbook > /dev/null"
-            script.echo "✅ ansible-playbook disponible"
+            script.echo "✅ ansible-playbook available"
             
             return true
         } catch (Exception e) {
-            script.error("❌ Prérequis Ansible manquants: ${e.message}")
+            script.error("❌ Missing Ansible prerequisites: ${e.message}")
             return false
         }
+    }
+    
+    /**
+     * Performs pre-deployment checks
+     */
+    def preDeploymentChecks(String targetServers, String inventory, String playbook) {
+        script.echo "🔍 Running pre-deployment checks"
+        
+        def checks = [:]
+        
+        // Check prerequisites
+        checks.prerequisites = checkPrerequisites()
+        
+        // Check connectivity
+        def connectivity = validateConnectivity(targetServers, inventory)
+        checks.connectivity = connectivity.success
+        
+        // Check playbook existence
+        try {
+            script.sh "test -f ${playbook}"
+            checks.playbookExists = true
+            script.echo "✅ Playbook found: ${playbook}"
+        } catch (Exception e) {
+            checks.playbookExists = false
+            script.echo "❌ Playbook not found: ${playbook}"
+        }
+        
+        // Check inventory
+        try {
+            script.sh "test -f ${inventory}"
+            checks.inventoryExists = true
+            script.echo "✅ Inventory found: ${inventory}"
+        } catch (Exception e) {
+            checks.inventoryExists = false
+            script.echo "❌ Inventory not found: ${inventory}"
+        }
+        
+        // Overall result
+        checks.allPassed = checks.prerequisites && checks.connectivity && 
+                          checks.playbookExists && checks.inventoryExists
+        
+        if (checks.allPassed) {
+            script.echo "✅ All pre-deployment checks passed"
+        } else {
+            script.echo "❌ Some pre-deployment checks failed"
+        }
+        
+        return checks
+    }
+    
+    /**
+     * Executes Ansible playbook with enhanced error handling
+     */
+    def executePlaybook(Map config) {
+        def startTime = System.currentTimeMillis()
+        
+        script.echo "🚀 Starting Ansible playbook execution"
+        script.echo "📋 Playbook: ${config.playbook}"
+        script.echo "🎯 Target: ${config.targetServers}"
+        
+        try {
+            // Pre-deployment checks
+            def checks = preDeploymentChecks(config.targetServers, config.inventory, config.playbook)
+            if (!checks.allPassed) {
+                throw new Exception("Pre-deployment checks failed")
+            }
+            
+            // Build command
+            def cmd = buildAnsibleCommand(config)
+            script.echo "🔧 Command: ${cmd}"
+            
+            // Execute playbook
+            def output = script.sh(
+                script: cmd,
+                returnStdout: true
+            )
+            
+            def endTime = System.currentTimeMillis()
+            def duration = (endTime - startTime) / 1000
+            
+            script.echo "✅ Playbook executed successfully in ${duration}s"
+            
+            // Format and save output
+            def formattedOutput = formatAnsibleOutput(output)
+            script.writeFile file: 'ansible-output.log', text: formattedOutput
+            
+            // Generate report
+            def report = generateDeploymentReport(config, startTime, endTime, 'success')
+            saveDeploymentReport(report)
+            
+            return [
+                success: true,
+                duration: duration,
+                output: formattedOutput,
+                report: report
+            ]
+            
+        } catch (Exception e) {
+            def endTime = System.currentTimeMillis()
+            def duration = (endTime - startTime) / 1000
+            
+            script.echo "❌ Playbook execution failed after ${duration}s: ${e.message}"
+            
+            // Generate failure report
+            def report = generateDeploymentReport(config, startTime, endTime, 'failure')
+            report.error = e.message
+            saveDeploymentReport(report)
+            
+            return [
+                success: false,
+                duration: duration,
+                error: e.message,
+                report: report
+            ]
+        }
+    }
+    
+    /**
+     * Builds the Ansible command with all parameters
+     */
+    private def buildAnsibleCommand(Map config) {
+        def cmd = "ansible-playbook ${config.playbook} -i ${config.inventory}"
+        
+        if (config.targetServers && config.targetServers != 'all') {
+            cmd += " -l ${config.targetServers}"
+        }
+        
+        if (config.tags) {
+            cmd += " --tags ${config.tags}"
+        }
+        
+        if (config.skipTags) {
+            cmd += " --skip-tags ${config.skipTags}"
+        }
+        
+        if (config.checkMode) {
+            cmd += " --check"
+        }
+        
+        if (config.verbose) {
+            cmd += " -${config.verbose}"
+        }
+        
+        if (config.ansibleVars) {
+            def extraVars = buildExtraVars(config.ansibleVars)
+            if (extraVars) {
+                cmd += " --extra-vars '${extraVars}'"
+            }
+        }
+        
+        return cmd
     }
 }

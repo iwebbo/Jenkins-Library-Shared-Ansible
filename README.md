@@ -1,5 +1,7 @@
 # Jenkins Ansible Shared Library - Documentation
 
+[![Jenkins](https://img.shields.io/badge/Jenkins-D33833?logo=jenkins&logoColor=white)](https://www.jenkins.io/)
+
 ## 📋 Table of Contents
 1. [Installation and Configuration](#installation-and-configuration)
 2. [Ansible Project Structure](#ansible-project-structure)
@@ -21,7 +23,7 @@
    - **Default version**: `main` (or your branch)
    - **Retrieval method**: Modern SCM
    - **Source Code Management**: Git
-   - **Project Repository**: `https://your-git-server/ansible-shared-lib.git`
+   - **Project Repository**: `https://github.com/iwebbo/Jenkins-Library-Shared-Ansible.git`
    - **Credentials**: Select your Git credentials
 
 #### Method 2: Folder Level Configuration
