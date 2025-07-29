@@ -248,10 +248,10 @@ private def getStatusText(String status) {
 private def getEmailRecipients(String status) {
     switch (status.toLowerCase()) {
         case 'failure':
-            return 'devops-team@company.com,dev-team@company.com'
+            return 'l.kieran95@gmail.com'
         case 'success':
-            return 'devops-team@company.com'
+            return 'l.kieran95@gmail.com'
         default:
-            return 'devops-team@company.com'
+            return 'l.kieran95@gmail.com'
     }
 }
