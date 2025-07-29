@@ -33,7 +33,7 @@ private def validatePlaybookSyntax(String playbook) {
         try {
             sh """
                 pwd
-                ls playbook/
+                ls -lath
                 if [ -f "${playbook}" ]; then
                     ansible-playbook --syntax-check "${playbook}"
                     echo "✅ Syntaxe du playbook valide"
