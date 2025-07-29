@@ -119,9 +119,6 @@ private def readAnsibleConfig(String configPath) {
         }
     } catch (Exception e) {
         echo "⚠️  Erreur lecture ansible.cfg: ${e.message}"
-        // Fallbacks
-        config.inventory = 'inventory/host.ini'
-        config.playbook_dir = 'playbook'
     }
     
     return config
