@@ -34,9 +34,6 @@ def call(Map config = [:]) {
     defaultConfig.forks = 10
     defaultConfig.become = true
     defaultConfig.becomeUser = 'root'
-    
-    // Fusion des configurations
-    config = defaultConfig + config
 
     echo "🚀 Début du déploiement Ansible"
     echo "Playbook: ${config.playbook}"
@@ -109,16 +106,16 @@ private def readAnsibleConfig(String configPath) {
                 line = line.trim()
                 if (line.contains('inventory =')) {
                     config.inventory = line.split('=')[1].trim()
-                    echo "📋 Inventory lu depuis ansible.cfg: ${config.inventory}"
+                    echo "Load configuration from ansible.cfg: ${config.inventory}"
                 }
                 if (line.contains('playbook_dir =')) {
                     config.playbook_dir = line.split('=')[1].trim()
-                    echo "📁 Playbook dir lu: ${config.playbook_dir}"
+                    echo "Playbook directory: ${config.playbook_dir}"
                 }
             }
         }
     } catch (Exception e) {
-        echo "⚠️  Erreur lecture ansible.cfg: ${e.message}"
+        echo "⚠️ Error load from ansible.cfg: ${e.message}"
     }
     
     return config
