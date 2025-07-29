@@ -201,7 +201,12 @@ private def prepareAnsibleVars(Map config) {
     ]
     
     // Fusion des variables système avec les variables utilisateur
-    config.ansibleVars = systemVars + config.ansibleVars
+    if (config.ansibleVars instanceof String) {
+    // Change var string to var map
+    config.ansibleVars = systemVars
+    } else {
+        config.ansibleVars = systemVars + config.ansibleVars
+    }
     
     echo "📝 Variables finales:"
     config.ansibleVars.each { key, value ->
