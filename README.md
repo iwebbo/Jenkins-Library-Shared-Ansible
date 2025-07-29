@@ -1,6 +1,6 @@
 # Jenkins Ansible Shared Library - Documentation
 
-[![Jenkins](https://img.shields.io/badge/Jenkins-D33833?logo=jenkins&logoColor=white)](https://www.jenkins.io/)
+![Jenkins](https://img.shields.io/badge/Jenkins-3776AB?style=for-the-badge&logo=Jenkins&logoColor=white) ![Ansible](https://img.shields.io/badge/Ansible-3776AB?style=for-the-badge&logo=Ansible&logoColor=white) ![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=Linux&logoColor=black) 
 
 ## 📋 Table of Contents
 1. [Installation and Configuration](#installation-and-configuration)
