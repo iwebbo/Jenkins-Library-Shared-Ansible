@@ -35,6 +35,8 @@ def call(Map config = [:]) {
     defaultConfig.become = true
     defaultConfig.becomeUser = 'root'
 
+    config = defaultConfig + config
+
     echo "🚀 Début du déploiement Ansible"
     echo "Playbook: ${config.playbook}"
     echo "Target Servers: ${config.targetServers}"
