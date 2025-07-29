@@ -23,7 +23,7 @@ def call(Map config = [:]) {
         config_path: '.', // Path folder of Ansible.cfg
         inventory: 'inventory',
         targetServers: '',
-        playbook: '',
+        playbook: 'playbook',
         ansibleVars: [:],
         tags: '',
         checkMode: false,

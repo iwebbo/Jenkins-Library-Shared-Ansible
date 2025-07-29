@@ -32,16 +32,16 @@ private def validatePlaybookSyntax(String playbook) {
     script {
         try {
             sh """
-                if [ -f "playbook/${playbook}" ]; then
-                    ansible-playbook --syntax-check "playbook/${playbook}"
+                if [ -f "${playbook}" ]; then
+                    ansible-playbook --syntax-check "${playbook}"
                     echo "✅ Syntaxe du playbook valide"
                 else
-                    echo "❌ Playbook playbook/${playbook} non trouvé"
+                    echo "❌ Playbook ${playbook} non trouvé"
                     exit 1
                 fi
             """
         } catch (Exception e) {
-            error("❌ Erreur de syntaxe dans le playbook playbook/${playbook}: ${e.message}")
+            error("❌ Erreur de syntaxe dans le playbook ${playbook}: ${e.message}")
         }
     }
 }
