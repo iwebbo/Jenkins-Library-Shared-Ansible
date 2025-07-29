@@ -220,15 +220,6 @@ private def prepareAnsibleVars(Map config) {
     } else {
         config.ansibleVars = systemVars + config.ansibleVars
     }
-    
-    echo "📝 Variables finales:"
-    config.ansibleVars.each { key, value ->
-        if (key.toLowerCase().contains('password') || key.toLowerCase().contains('secret')) {
-            echo "   ${key}: *** (masqué)"
-        } else {
-            echo "   ${key}: ${value}"
-        }
-    }
 }
 
 /**
