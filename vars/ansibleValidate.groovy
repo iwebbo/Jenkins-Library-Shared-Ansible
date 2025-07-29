@@ -29,6 +29,9 @@ private def validateInventory(String inventory) {
     script {
         try {
             sh """
+                pwd
+                ls -lath
+                ls -alth inventory
                 if [ -f "${inventory}" ] || [ -d "${inventory}" ]; then
                     ansible-inventory -i "${inventory}" --list > /dev/null
                     echo "✅ Inventaire valide"
