@@ -94,6 +94,38 @@ def call(Map config = [:]) {
         throw e
     }
 }
+/**
+ * Lit la configuration depuis ansible.cfg
+ */
+private def readAnsibleConfig(String configPath) {
+    def config = [:]
+    
+    try {
+        def configFile = "${configPath}/ansible.cfg"
+        if (fileExists(configFile)) {
+            def content = readFile(configFile)
+            
+            content.split('\n').each { line ->
+                line = line.trim()
+                if (line.contains('inventory =')) {
+                    config.inventory = line.split('=')[1].trim()
+                    echo "📋 Inventory lu depuis ansible.cfg: ${config.inventory}"
+                }
+                if (line.contains('playbook_dir =')) {
+                    config.playbook_dir = line.split('=')[1].trim()
+                    echo "📁 Playbook dir lu: ${config.playbook_dir}"
+                }
+            }
+        }
+    } catch (Exception e) {
+        echo "⚠️  Erreur lecture ansible.cfg: ${e.message}"
+        // Fallbacks
+        config.inventory = 'inventory/host.ini'
+        config.playbook_dir = 'playbook'
+    }
+    
+    return config
+}
 
 /**
  * Détecte le type de serveurs et retourne les credentials appropriés
