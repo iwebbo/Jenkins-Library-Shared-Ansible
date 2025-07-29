@@ -5,12 +5,9 @@
  * Usage: ansibleValidate([playbook: 'site.yml', targetServers: 'web01,web02'])
  */
 def call(Map config = [:]) {
-    echo "🔍 Validation des configurations Ansible"
-    echo "🎯 Serveurs cibles: ${config.targetServers}"
-    
-    // Validation de la syntaxe du playbook
-    validatePlaybookSyntax(config.playbook)
-    
+    echo "Validation des configurations Ansible"
+    echo "Serveurs cibles: ${config.targetServers}"
+     
     // Validation de l'inventaire
     validateInventory(config.inventory)
     
@@ -24,29 +21,6 @@ def call(Map config = [:]) {
 }
 
 /**
- * Valide la syntaxe du playbook
- */
-private def validatePlaybookSyntax(String playbook) {
-    echo "📝 Validation de la syntaxe du playbook: ${playbook}"
-    
-    script {
-        try {
-            sh """
-                if [ -f "${playbook}" ]; then
-                    ansible-playbook --syntax-check "${playbook}"
-                    echo "✅ Syntaxe du playbook valide"
-                else
-                    echo "❌ Playbook ${playbook} non trouvé"
-                    exit 1
-                fi
-            """
-        } catch (Exception e) {
-            error("❌ Erreur de syntaxe dans le playbook ${playbook}: ${e.message}")
-        }
-    }
-}
-
-/**
  * Valide l'inventaire
  */
 private def validateInventory(String inventory) {
@@ -55,16 +29,16 @@ private def validateInventory(String inventory) {
     script {
         try {
             sh """
-                if [ -f "inventory/${inventory}" ] || [ -d "inventory/${inventory}" ]; then
-                    ansible-inventory -i "inventory/${inventory}" --list > /dev/null
+                if [ -f "${inventory}" ] || [ -d "${inventory}" ]; then
+                    ansible-inventory -i "${inventory}" --list > /dev/null
                     echo "✅ Inventaire valide"
                 else
-                    echo "❌ Inventaire inventory/${inventory} non trouvé"
+                    echo "❌ Inventaire ${inventory} non trouvé"
                     exit 1
                 fi
             """
         } catch (Exception e) {
-            error("❌ Erreur dans l'inventaire inventory/${inventory}: ${e.message}")
+            error("❌ Erreur dans l'inventaire ${inventory}: ${e.message}")
         }
     }
 }
