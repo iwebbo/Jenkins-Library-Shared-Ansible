@@ -18,33 +18,25 @@ def call(Map config = [:]) {
     }
     
     // Configuration par défaut
-    def defaultConfig = [
-        ansible_path: '', //Path folder of bin ansible
-        config_path: '.', // Path folder of Ansible.cfg
-        inventory: '',
-        targetServers: '',
-        playbook: '',
-        ansibleVars: [:],
-        tags: '',
-        checkMode: false,
-        verbose: false,
-        timeout: 3600,
-        notification: true,
-        forks: 10,
-        become: true,
-        becomeUser: 'root'
-    ]
+    def defaultConfig = readAnsibleConfig(config.config_path ?: '.')
+
+    // Ajout des valeurs qui ne sont pas dans ansible.cfg
+    defaultConfig.ansible_path = ''
+    defaultConfig.config_path = '.'
+    defaultConfig.targetServers = ''
+    defaultConfig.playbook = ''
+    defaultConfig.ansibleVars = [:]
+    defaultConfig.tags = ''
+    defaultConfig.checkMode = false
+    defaultConfig.verbose = false
+    defaultConfig.timeout = 3600
+    defaultConfig.notification = true
+    defaultConfig.forks = 10
+    defaultConfig.become = true
+    defaultConfig.becomeUser = 'root'
     
     // Fusion des configurations
     config = defaultConfig + config
-    
-
-    // // A delete gérér directement dans le fichier ansible.cfg
-    // if (!config.playbook.contains('/')) {
-    // // config.playbook contient juste 'site.yml'
-    // // defaultConfig.playbook contient 'playbook'
-    // config.playbook = "${defaultConfig.playbook}/${config.playbook}"
-    // }
 
     echo "🚀 Début du déploiement Ansible"
     echo "Playbook: ${config.playbook}"
