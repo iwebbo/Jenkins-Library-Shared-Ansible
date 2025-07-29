@@ -10,32 +10,38 @@ def call(Map config = [:]) {
         status: 'unknown',
         playbook: '',
         targetServers: '',
+        inventory: '',
+        tags: '',
+        version: '',
+        duration: '',
         ansibleVars: [:],
         error: '',
-        duration: '',
         sendEmail: true,
-        sendSlack: false
+        sendSlack: false,
+        extraVars: '',
+        packageName: '',
+        environment: ''
     ]
     
     config = defaultConfig + config
     
-    echo "📧 Envoi de notification - Status: ${config.status}"
+    echo "📧 Envoi de notification Ansible - Status: ${config.status}"
     
     try {
-        // Préparation des données pour la notification
-        def notificationData = prepareNotificationData(config)
-        
-        // Génération du rapport
-        generateReport(notificationData)
+        // Génération du rapport détaillé
+        generateAnsibleReport(config)
         
         // Envoi des notifications selon la configuration
         if (config.sendEmail) {
-            sendEmailNotification(notificationData)
+            sendAnsibleEmail(config)
         }
         
         if (config.sendSlack) {
-            sendSlackNotification(notificationData)
+            sendSlackNotification(config)
         }
+        
+        // Mise à jour de la description du build
+        updateBuildDescription(config)
         
     } catch (Exception e) {
         echo "⚠️  Erreur lors de l'envoi de notification: ${e.message}"
@@ -43,59 +49,47 @@ def call(Map config = [:]) {
 }
 
 /**
- * Prépare les données pour la notification
+ * Génère un rapport détaillé du déploiement Ansible
  */
-private def prepareNotificationData(Map config) {
-    def statusEmoji = getStatusEmoji(config.status)
-    def statusColor = getStatusColor(config.status)
-    def statusText = getStatusText(config.status)
-    
-    return [
-        status: config.status,
-        statusEmoji: statusEmoji,
-        statusColor: statusColor,
-        statusText: statusText,
-        playbook: config.playbook,
-        targetServers: config.targetServers,
-        ansibleVars: config.ansibleVars,
-        error: config.error,
-        duration: config.duration,
-        timestamp: new Date().format('yyyy-MM-dd HH:mm:ss'),
-        jenkins: [
-            buildNumber: env.BUILD_NUMBER,
-            buildUrl: env.BUILD_URL,
-            jobName: env.JOB_NAME,
-            buildUser: env.BUILD_USER ?: 'jenkins'
-        ]
-    ]
-}
-
-/**
- * Génère un rapport détaillé du déploiement
- */
-private def generateReport(Map data) {
+private def generateAnsibleReport(Map config) {
     try {
+        def statusEmoji = getStatusEmoji(config.status)
+        def timestamp = new Date().format('yyyy-MM-dd HH:mm:ss')
+        
         def report = """
 === RAPPORT DÉPLOIEMENT ANSIBLE ===
-Playbook: ${data.playbook}
-Serveurs Cibles: ${data.targetServers}
-Statut: ${data.statusText} (${data.status})
-Durée: ${data.duration}
-Timestamp: ${data.timestamp}
-Déclenché par: ${data.jenkins.buildUser}
-Build Jenkins: #${data.jenkins.buildNumber}
-URL Build: ${data.jenkins.buildUrl}
+${statusEmoji} Statut: ${config.status.toUpperCase()}
+Playbook: ${config.playbook ?: 'Non spécifié'}
+Inventaire: ${config.inventory ?: 'Non spécifié'}
+Serveurs Cibles: ${config.targetServers ?: 'Non spécifiés'}
+Tags: ${config.tags ?: 'Aucun'}
+Version: ${config.version ?: 'Non spécifiée'}
+Environnement: ${config.environment ?: 'Non spécifié'}
+Durée: ${config.duration ?: 'Non calculée'}
+Package (si applicable): ${config.packageName ?: 'N/A'}
 
-Variables Ansible:${data.ansibleVars ? formatVarsForReport(data.ansibleVars) : ' Aucune'}
+Détails Jenkins:
+- Build: #${env.BUILD_NUMBER}
+- Job: ${env.JOB_NAME}
+- URL Build: ${env.BUILD_URL}
+- Console: ${env.BUILD_URL}console
+- Déclenché par: ${env.BUILD_USER ?: 'jenkins'}
+- Date: ${timestamp}
 
-${data.error ? "Erreur:\n${data.error}" : 'Aucune erreur'}
-=====================================
+Variables Ansible Extra:
+${config.extraVars ? config.extraVars : 'Aucune variable extra'}
+
+Variables de configuration:
+${formatVarsForReport(config.ansibleVars)}
+
+${config.error ? "❌ ERREUR:\n${config.error}" : '✅ Aucune erreur signalée'}
+==========================================
         """
         
         writeFile file: 'ansible_deployment_report.txt', text: report
         archiveArtifacts artifacts: 'ansible_deployment_report.txt', allowEmptyArchive: true
         
-        echo "✅ Rapport généré: ansible_deployment_report.txt"
+        echo "✅ Rapport Ansible généré: ansible_deployment_report.txt"
     } catch (Exception e) {
         echo "⚠️ Erreur lors de la génération du rapport: ${e.message}"
     }
@@ -105,10 +99,16 @@ ${data.error ? "Erreur:\n${data.error}" : 'Aucune erreur'}
  * Formate les variables pour le rapport
  */
 private def formatVarsForReport(Map vars) {
+    if (!vars || vars.isEmpty()) {
+        return "Aucune variable de configuration"
+    }
+    
     def formatted = ""
     vars.each { key, value ->
-        if (key.toLowerCase().contains('password') || key.toLowerCase().contains('secret')) {
-            formatted += "\n  - ${key}: *** (masqué)"
+        if (key.toLowerCase().contains('password') || 
+            key.toLowerCase().contains('secret') || 
+            key.toLowerCase().contains('token')) {
+            formatted += "\n  - ${key}: *** (masqué pour sécurité)"
         } else {
             formatted += "\n  - ${key}: ${value}"
         }
@@ -117,109 +117,176 @@ private def formatVarsForReport(Map vars) {
 }
 
 /**
- * Envoi de notification par email - CORRIGÉ
+ * Envoi de notification par email (version simplifiée)
  */
-private def sendEmailNotification(Map data) {
+private def sendAnsibleEmail(Map config) {
     try {
-        def subject = "${data.statusEmoji} Ansible Deploy ${data.statusText} - ${data.playbook}"
-        def body = buildEmailBody(data)
-        def recipients = getEmailRecipients(data.status)
+        def statusEmoji = getStatusEmoji(config.status)
+        def statusText = getStatusText(config.status)
+        def timestamp = new Date().format('yyyy-MM-dd HH:mm:ss')
         
-        // CORRECTION: Utilisation de mail au lieu d'emailext
+        def subject = "[Jenkins] Ansible ${statusText} - ${config.playbook ?: 'Déploiement'}"
+        if (config.status == 'failure') {
+            subject = "[Jenkins] ❌ Ansible ÉCHEC - ${config.playbook ?: 'Déploiement'}"
+        }
+        
+        def emailBody = buildEmailBody(config, statusEmoji, statusText, timestamp)
+        def recipients = getEmailRecipients(config.status)
+        
         mail to: recipients,
              subject: subject,
-             body: body
+             body: emailBody
         
-        echo "✅ Email envoyé à: ${recipients}"
+        echo "✅ Email Ansible envoyé à: ${recipients}"
     } catch (Exception e) {
-        echo "❌ Erreur envoi email: ${e.message}"
+        echo "❌ Erreur envoi email Ansible: ${e.message}"
     }
 }
 
 /**
- * Construction du corps de l'email - TEMPLATE HTML CONSERVÉ
+ * Construction du corps de l'email (texte formaté)
  */
-private def buildEmailBody(Map data) {
-    def template = """
-<html>
-<head>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .header { background: ${data.statusColor}; color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; }
-        .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        .info-table th, .info-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        .info-table th { background-color: #f2f2f2; }
-        .error-box { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .vars-box { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>${data.statusEmoji} Déploiement Ansible ${data.statusText}</h1>
-    </div>
-    
-    <div class="content">
-        <h2>Détails du Déploiement</h2>
-        
-        <table class="info-table">
-            <tr><th>Playbook</th><td>${data.playbook}</td></tr>
-            <tr><th>Serveurs Cibles</th><td>${data.targetServers}</td></tr>
-            <tr><th>Status</th><td>${data.statusText}</td></tr>
-            <tr><th>Durée</th><td>${data.duration}</td></tr>
-            <tr><th>Timestamp</th><td>${data.timestamp}</td></tr>
-            <tr><th>Déclenché par</th><td>${data.jenkins.buildUser}</td></tr>
-            <tr><th>Build Jenkins</th><td><a href="${data.jenkins.buildUrl}">#${data.jenkins.buildNumber}</a></td></tr>
-        </table>
-        
-        ${data.ansibleVars ? buildVarsSection(data.ansibleVars) : ''}
-        ${data.error ? buildErrorSection(data.error) : ''}
-    </div>
-</body>
-</html>
-    """
-    
-    return template
+private def buildEmailBody(Map config, String statusEmoji, String statusText, String timestamp) {
+    if (config.status == 'success') {
+        return buildSuccessEmailBody(config, statusEmoji, statusText, timestamp)
+    } else {
+        return buildFailureEmailBody(config, statusEmoji, statusText, timestamp)
+    }
 }
 
 /**
- * Construction de la section variables
+ * Email de succès
  */
-private def buildVarsSection(Map vars) {
-    def varsHtml = '<div class="vars-box"><h3>Variables Ansible</h3><ul>'
+private def buildSuccessEmailBody(Map config, String statusEmoji, String statusText, String timestamp) {
+    return """
+${statusEmoji} ANSIBLE DÉPLOIEMENT - SUCCÈS
+
+Playbook: ${config.playbook ?: 'Non spécifié'}
+Inventaire: ${config.inventory ?: 'Non spécifié'}
+Serveurs: ${config.targetServers ?: 'Non spécifiés'}
+Version: ${config.version ?: 'Non spécifiée'}
+Environnement: ${config.environment ?: 'Non spécifié'}
+Durée: ${config.duration ?: 'Non calculée'}
+Build: #${env.BUILD_NUMBER}
+Date: ${timestamp}
+
+📊 Détails du build: ${env.BUILD_URL}
+
+Configuration utilisée:
+- Tags Ansible: ${config.tags ?: 'Aucun'}
+- Variables Extra: ${config.extraVars ?: 'Aucune'}
+- Package (si applicable): ${config.packageName ?: 'N/A'}
+
+Variables Ansible:
+${config.ansibleVars ? formatVarsForEmail(config.ansibleVars) : '- Aucune variable configurée'}
+
+✅ Le déploiement s'est terminé avec succès.
+    """
+}
+
+/**
+ * Email d'échec
+ */
+private def buildFailureEmailBody(Map config, String statusEmoji, String statusText, String timestamp) {
+    return """
+❌ ANSIBLE DÉPLOIEMENT - ÉCHEC
+
+Playbook: ${config.playbook ?: 'Non spécifié'}
+Inventaire: ${config.inventory ?: 'Non spécifié'}
+Serveurs: ${config.targetServers ?: 'Non spécifiés'}
+Version: ${config.version ?: 'Non spécifiée'}
+Environnement: ${config.environment ?: 'Non spécifié'}
+Build: #${env.BUILD_NUMBER}
+Date: ${timestamp}
+
+🔍 Logs d'erreur: ${env.BUILD_URL}console
+
+Configuration utilisée:
+- Tags Ansible: ${config.tags ?: 'Aucun'}
+- Variables Extra: ${config.extraVars ?: 'Aucune'}
+- Package (si applicable): ${config.packageName ?: 'N/A'}
+
+Variables Ansible configurées:
+${config.ansibleVars ? formatVarsForEmail(config.ansibleVars) : '- Aucune variable configurée'}
+
+❌ ERREUR DÉTECTÉE:
+${config.error ?: 'Erreur non spécifiée - Consultez les logs Jenkins'}
+
+⚠️ Veuillez vérifier les logs pour plus de détails.
+    """
+}
+
+/**
+ * Formate les variables pour l'email
+ */
+private def formatVarsForEmail(Map vars) {
+    def formatted = ""
     vars.each { key, value ->
-        if (key.toLowerCase().contains('password') || key.toLowerCase().contains('secret')) {
-            varsHtml += "<li><strong>${key}:</strong> *** (masqué)</li>"
+        if (key.toLowerCase().contains('password') || 
+            key.toLowerCase().contains('secret') || 
+            key.toLowerCase().contains('token')) {
+            formatted += "- ${key}: *** (masqué)\n"
         } else {
-            varsHtml += "<li><strong>${key}:</strong> ${value}</li>"
+            formatted += "- ${key}: ${value}\n"
         }
     }
-    varsHtml += '</ul></div>'
-    return varsHtml
+    return formatted
 }
 
 /**
- * Construction de la section erreur
+ * Met à jour la description du build
  */
-private def buildErrorSection(String error) {
-    return """
-    <div class="error-box">
-        <h3>❌ Erreur</h3>
-        <pre>${error}</pre>
-    </div>
-    """
+private def updateBuildDescription(Map config) {
+    try {
+        def statusEmoji = getStatusEmoji(config.status)
+        def description = "${statusEmoji} ${config.playbook ?: 'Ansible'}"
+        
+        if (config.targetServers) {
+            description += " → ${config.targetServers}"
+        }
+        
+        if (config.environment) {
+            description += " (${config.environment})"
+        }
+        
+        if (config.status == 'failure') {
+            description += " - ÉCHEC"
+        }
+        
+        currentBuild.description = description
+        echo "✅ Description du build mise à jour: ${description}"
+    } catch (Exception e) {
+        echo "⚠️ Erreur mise à jour description: ${e.message}"
+    }
 }
 
 /**
  * Envoi de notification Slack
  */
-private def sendSlackNotification(Map data) {
+private def sendSlackNotification(Map config) {
     try {
-        def message = buildSlackMessage(data)
+        def statusEmoji = getStatusEmoji(config.status)
+        def statusText = getStatusText(config.status)
+        def statusColor = getStatusColor(config.status)
+        
+        def message = """
+${statusEmoji} *Ansible Deploy ${statusText}*
+
+*Playbook:* ${config.playbook ?: 'Non spécifié'}
+*Serveurs:* ${config.targetServers ?: 'Non spécifiés'}
+*Environnement:* ${config.environment ?: 'Non spécifié'}
+*Durée:* ${config.duration ?: 'Non calculée'}
+*Build:* <${env.BUILD_URL}|#${env.BUILD_NUMBER}>
+*Par:* ${env.BUILD_USER ?: 'jenkins'}
+        """
+        
+        if (config.error) {
+            message += "\n*Erreur:* ```${config.error}```"
+        }
         
         slackSend(
             channel: '#deployments',
-            color: data.statusColor,
+            color: statusColor,
             message: message
         )
         
@@ -227,27 +294,6 @@ private def sendSlackNotification(Map data) {
     } catch (Exception e) {
         echo "❌ Erreur Slack: ${e.message}"
     }
-}
-
-/**
- * Construction du message Slack
- */
-private def buildSlackMessage(Map data) {
-    def message = """
-${data.statusEmoji} *Ansible Deploy ${data.statusText}*
-
-*Playbook:* ${data.playbook}
-*Serveurs:* ${data.targetServers}
-*Durée:* ${data.duration}
-*Build:* <${data.jenkins.buildUrl}|#${data.jenkins.buildNumber}>
-*Par:* ${data.jenkins.buildUser}
-    """
-    
-    if (data.error) {
-        message += "\n*Erreur:* ```${data.error}```"
-    }
-    
-    return message
 }
 
 /**
@@ -293,6 +339,7 @@ private def getStatusText(String status) {
  * Obtient les destinataires email selon le status
  */
 private def getEmailRecipients(String status) {
+    // Vous pouvez personnaliser selon vos besoins
     switch (status.toLowerCase()) {
         case 'failure':
             return 'l.kieran95@gmail.com'
