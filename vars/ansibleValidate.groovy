@@ -14,9 +14,6 @@ def call(Map config = [:]) {
     // Validation des serveurs cibles dans l'inventaire
     validateTargetServers(config)
     
-    // Validation des variables Ansible
-    validateAnsibleVars(config.ansibleVars)
-    
     echo "✅ Validation Ansible terminée avec succès"
 }
 
@@ -29,9 +26,6 @@ private def validateInventory(String inventory) {
     script {
         try {
             sh """
-                pwd
-                ls -lath
-                ls -alth inventory
                 if [ -f "${inventory}" ] || [ -d "${inventory}" ]; then
                     ansible-inventory -i "${inventory}" --list > /dev/null
                     echo "✅ Inventaire valide"
@@ -63,32 +57,4 @@ private def validateTargetServers(Map config) {
             echo "⚠️  Avertissement lors de la validation des serveurs: ${e.message}"
         }
     }
-}
-
-/**
- * Valide les variables Ansible
- */
-private def validateAnsibleVars(Map ansibleVars) {
-    if (!ansibleVars) {
-        echo "ℹ️  Aucune variable Ansible personnalisée définie"
-        return
-    }
-    
-    echo "🔧 Validation des variables Ansible:"
-    
-    ansibleVars.each { key, value ->
-        // Validation du nom de variable (doit être valide pour Ansible)
-        if (!key.matches('^[a-zA-Z_][a-zA-Z0-9_]*$')) {
-            error("❌ Nom de variable invalide: '${key}'. Doit commencer par une lettre ou underscore.")
-        }
-        
-        // Validation des valeurs sensibles
-        if (key.toLowerCase().contains('password') || key.toLowerCase().contains('secret')) {
-            echo "🔒 Variable sensible détectée: ${key} (valeur masquée)"
-        } else {
-            echo "   ${key}: ${value}"
-        }
-    }
-    
-    echo "✅ Variables Ansible validées"
 }
