@@ -279,7 +279,7 @@ private def executePlaybook(Map config, String serverType) {
     def ansibleCommand = "ansible-playbook"
     
     // Ajout du playbook
-    ansibleCommand += " ${config.playbook_dir}/${config.playbook}"
+    ansibleCommand += " ${config.playbook_dir}${config.playbook}"
     
     // Ajout de l'inventaire
     ansibleCommand += " -i ${config.inventory}"
